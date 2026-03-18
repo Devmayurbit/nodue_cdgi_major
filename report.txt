@@ -1,0 +1,290 @@
+CDGI NO-DUES MANAGEMENT SYSTEM
+Comprehensive Workflow Report, Implementation Notes, and Presentation Guide
+
+Prepared on: 16 March 2026
+Project: CampusDues
+Prepared for: Academic Review Submission
+
+============================================================
+1. ABSTRACT
+============================================================
+This report explains the end-to-end workflow of the CDGI No-Dues Management System from student request submission to final certificate generation. It documents the implemented role-based process, approval gates, business rules, and operational instructions. It also provides a screenshot plan and practical do and do-not guidelines so the process can be presented as a formal project report.
+
+Key implemented rule:
+A student request can proceed to admin stage only after a minimum of 3 faculty members from the same department (branch), same section, and same semester complete faculty approval.
+
+============================================================
+2. PROBLEM STATEMENT
+============================================================
+Traditional no-dues handling in colleges is manual, slow, and difficult to audit. Common issues include:
+- Missing approvals from relevant stakeholders
+- Lack of status transparency for students
+- Delayed escalation to admin/HOD
+- Poor traceability in case of disputes
+
+The system solves this through controlled workflow states, strict role access, and audit-backed approval transitions.
+
+============================================================
+3. SYSTEM ACTORS AND RESPONSIBILITIES
+============================================================
+3.1 Student
+- Creates and submits no-dues request
+- Tracks status changes
+- Downloads certificate after final approval
+
+3.2 Faculty
+- Can review only mapped student requests from same department + section + semester
+- Updates assignment/lab related subject approval
+- Can approve or reject
+
+3.3 Admin
+- Reviews institutional clearances (Library, Accounts, Hostel, Lab)
+- Can reject request if any verification fails
+- Escalates complete request to HOD/Superadmin
+
+3.4 HOD/Superadmin
+- Final authority for approval/rejection
+- On approval, system generates certificate
+
+============================================================
+4. DATA AND RULE FOUNDATION
+============================================================
+4.1 Student Profile Requirements
+Student must have:
+- Enrollment Number
+- Department
+- Section
+- Semester
+
+4.2 Faculty Profile Requirements
+Faculty must have:
+- Department
+- Section
+- Semester
+- Subject
+
+4.3 Mandatory Faculty Count Rule
+- Minimum required faculty for a valid pipeline = 3
+- Matching scope = same department + same section + same semester
+- If fewer than 3 active mapped faculty exist, student submission is blocked
+
+============================================================
+5. END-TO-END WORKFLOW
+============================================================
+STEP 1: Student Registration/Login
+- Student creates account, verifies email (OTP), logs in.
+
+STEP 2: Student Submits No-Dues Request
+- Student submits form with remarks and optional attachments.
+- System verifies profile completeness.
+- System verifies minimum 3 eligible faculty mappings.
+- Request is created in submitted state.
+
+STEP 3: Faculty Mapping and Notifications
+- Subject-wise faculty approval entries are ensured.
+- Mapped faculty are notified in app and by email.
+
+STEP 4: Faculty Review Stage
+- Only mapped faculty can access that request.
+- Faculty provides assignment/lab decision.
+- If any faculty rejects -> request becomes rejected.
+- If all mapped faculty approvals are complete and valid -> request moves forward.
+
+STEP 5: Admin Verification Stage
+- Admin reviews Library, Accounts, Hostel, and Lab clearances.
+- Any admin rejection -> request becomes rejected.
+- On completion of all required admin clearances -> request is ready for HOD.
+
+STEP 6: HOD/Superadmin Final Stage
+- HOD can approve or reject.
+- On approval:
+  - Request status becomes approved
+  - Certificate is generated
+  - Student receives final notification
+
+STEP 7: Student Outcome
+- Student sees final status and can download certificate if approved.
+
+============================================================
+6. STATE TRANSITION REFERENCE
+============================================================
+Typical forward path:
+submitted -> in_progress -> approved
+
+Rejection path:
+submitted/in_progress -> rejected
+
+Trigger notes:
+- Faculty rejection: immediate rejected state
+- Admin rejection: rejected state
+- HOD rejection: final rejected state
+- HOD approval (after all gates): approved state + certificate generation
+
+============================================================
+7. VISIBILITY RULES (WHO CAN SEE WHAT)
+============================================================
+Student:
+- Can see only own requests.
+
+Faculty:
+- Can see only requests where they are mapped reviewer.
+- Mapping is constrained by department + section + semester.
+
+Admin:
+- Can see requests eligible for admin verification and perform departmental verification actions.
+
+HOD/Superadmin:
+- Can see final-stage requests and override/finalize as per role permissions.
+
+============================================================
+8. APPROVAL GATE LOGIC SUMMARY
+============================================================
+Gate A: Submission Gate
+- Condition: Student profile complete + at least 3 active matching faculty available.
+
+Gate B: Faculty Completion Gate
+- Condition: All mapped faculty approvals completed without rejection.
+- Condition includes minimum faculty count rule.
+
+Gate C: Admin Completion Gate
+- Condition: Library, Accounts, Hostel, and Lab clearances approved.
+
+Gate D: Final Gate
+- Condition: HOD/Superadmin final approval.
+- Result: Certificate generated.
+
+============================================================
+9. WHAT TO DO / WHAT NOT TO DO
+============================================================
+9.1 Student Do
+- Keep profile updated (department, section, semester, enrollment).
+- Upload readable supporting documents if requested.
+- Check dashboard/notifications regularly.
+
+9.2 Student Do Not
+- Do not submit incomplete profile.
+- Do not create duplicate active requests.
+- Do not ignore rejection remarks.
+
+9.3 Faculty Do
+- Verify only students from your mapped department/section/semester.
+- Add meaningful remarks when rejecting.
+- Complete pending approvals quickly.
+
+9.4 Faculty Do Not
+- Do not approve unrelated requests.
+- Do not skip review details before approval.
+- Do not leave requests pending for long periods.
+
+9.5 Admin Do
+- Verify all required clearances systematically.
+- Use rejection remarks clearly when needed.
+- Escalate only fully completed requests to HOD.
+
+9.6 Admin Do Not
+- Do not bypass faculty completion gate.
+- Do not mark approvals without proper evidence.
+
+9.7 HOD/Superadmin Do
+- Review final summary before approval.
+- Confirm all lower-stage gates are complete.
+
+9.8 HOD/Superadmin Do Not
+- Do not approve if mandatory clearances are missing.
+- Do not finalize without audit visibility.
+
+============================================================
+10. SCREENSHOT PLAN (SS) FOR PROJECT SUBMISSION
+============================================================
+Note: Insert actual screenshots in your Word/PDF report using the labels below.
+
+SS-01: Student Registration screen
+SS-02: Student Login screen
+SS-03: Student profile showing department/section/semester
+SS-04: Student No-Dues form before submit
+SS-05: Submission success message
+SS-06: Faculty dashboard pending requests list
+SS-07: Faculty approval action screen (assignment/lab)
+SS-08: Request status after faculty approvals
+SS-09: Admin verification screen (Library/Accounts/Hostel/Lab)
+SS-10: Admin completion and HOD notification state
+SS-11: HOD final approval screen
+SS-12: Certificate generated view
+SS-13: Student certificate download page
+SS-14: Audit log page with register/login/approval trail
+
+Screenshot capture instructions:
+- Keep browser in full-screen mode for consistency.
+- Use same user naming pattern in all screenshots.
+- Highlight status badges and timestamps where visible.
+- Keep sensitive data hidden or anonymized.
+
+============================================================
+11. RECOMMENDED DEMONSTRATION SCRIPT (VIVA/REVIEW)
+============================================================
+1) Log in as student and show profile completeness.
+2) Submit no-dues request.
+3) Show faculty side: only matching semester/section/department requests visible.
+4) Approve from at least 3 faculty accounts.
+5) Show that request becomes admin-eligible only after faculty gate completion.
+6) Complete admin clearances.
+7) Finalize by HOD and generate certificate.
+8) Return to student and download certificate.
+9) Show audit logs proving traceability.
+
+============================================================
+12. TEST CASES TO PRESENT
+============================================================
+TC-01 Valid full flow
+- Expected: Approved + certificate generated.
+
+TC-02 Less than 3 mapped faculty
+- Expected: Student submission blocked with clear message.
+
+TC-03 One faculty rejection
+- Expected: Request rejected.
+
+TC-04 Admin rejection at one clearance
+- Expected: Request rejected.
+
+TC-05 HOD rejection
+- Expected: Final rejected status.
+
+TC-06 Unauthorized faculty scope
+- Expected: Access denied for non-matching faculty.
+
+============================================================
+13. QUALITY, SECURITY, AND AUDIT NOTES
+============================================================
+- Role-based authorization enforced on API endpoints.
+- Workflow is gate-driven to prevent early escalation.
+- Audit logs capture major actions (register, login, approvals).
+- Notifications and emails support timely action.
+
+============================================================
+14. LIMITATIONS AND FUTURE IMPROVEMENTS
+============================================================
+Current limitations:
+- Manual staffing needed to ensure enough faculty mappings.
+- Process depends on profile data correctness.
+
+Future scope:
+- Auto-assign faculty load balancing.
+- SLA dashboards for pending approvals.
+- Analytics by branch/semester rejection trends.
+- Exportable compliance report per student.
+
+============================================================
+15. CONCLUSION
+============================================================
+The CDGI No-Dues Management System provides a structured and auditable academic clearance workflow. The newly enforced rule (minimum 3 same-branch, same-section, same-semester faculty approvals) improves fairness, consistency, and process integrity before administrative escalation. This makes the project suitable for institutional usage and academic demonstration.
+
+============================================================
+ANNEXURE A: QUICK CHECKLIST BEFORE FINAL SUBMISSION TO SIR
+============================================================
+- Confirm at least 3 active faculty exist per target class group.
+- Confirm faculty semester values are correctly set.
+- Confirm request flow transitions in sequence.
+- Confirm screenshots SS-01 to SS-14 are captured.
+- Convert final report (with screenshots) to PDF.
+- Keep this report.txt as technical reference attachment.

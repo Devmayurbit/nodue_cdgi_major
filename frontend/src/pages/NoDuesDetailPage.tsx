@@ -1,0 +1,72 @@
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useRoute, Link } from 'wouter';
+import api from '../lib/api';
+import StatusBadge from '../components/StatusBadge';
+import ApprovalTimeline from '../components/ApprovalTimeline';
+
+const NoDuesDetailPage: React.FC = () => {
+  const [, params] = useRoute('/nodues/:id');
+  const id = params?.id;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['noDuesDetail', id],
+    queryFn: () => api.get(`/nodues/${id}`).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+  const nd = data;
+
+  if (isLoading) {
+    return <div className="skeleton h-56 rounded-2xl" />;
+  }
+
+  if (!nd) {
+    return (
+      <div className="glass-card p-10 text-center">
+        <h2 className="text-xl font-bold mb-2">Application Not Found</h2>
+        <Link href="/nodues/my" className="btn-primary inline-block">Back to My Applications</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">Application #{nd._id.slice(-6).toUpperCase()}</h1>
+            <p className="text-[var(--color-text-secondary)] text-sm">Submitted on {new Date(nd.createdAt).toLocaleDateString()}</p>
+          </div>
+          <StatusBadge status={nd.status} />
+        </div>
+      </div>
+
+      <div className="glass-card p-6">
+        <h2 className="font-semibold mb-4">Approval Timeline</h2>
+        <ApprovalTimeline
+          steps={[
+            { label: 'Faculty', status: nd.facultyApproval?.status || 'pending' },
+            { label: 'Library', status: nd.libraryClearance?.status || 'pending' },
+            { label: 'Accounts', status: nd.accountsClearance?.status || 'pending' },
+            { label: 'Hostel', status: nd.hostelClearance?.status || 'pending' },
+            { label: 'Lab', status: nd.labClearance?.status || 'pending' },
+            { label: 'Assignment', status: nd.assignmentClearance?.status || 'pending' },
+            { label: 'Admin Final', status: nd.adminApproval?.status || 'pending' },
+            { label: 'HOD Final', status: nd.superAdminApproval?.status || 'pending' },
+          ]}
+        />
+      </div>
+
+      {nd.certificateId && (
+        <div className="glass-card p-6">
+          <h2 className="font-semibold mb-2">Certificate Available</h2>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4">Your clearance certificate is generated.</p>
+          <Link href="/certificates" className="btn-primary inline-block">Download Certificate</Link>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default NoDuesDetailPage;
