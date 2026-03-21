@@ -12,6 +12,7 @@ export enum NoDuesStatus {
   IN_PROGRESS = 'in_progress',
   APPROVED = 'approved',
   REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
 }
 
 export interface IDepartmentApproval {

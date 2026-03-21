@@ -20,9 +20,13 @@ import certificateRoutes from './routes/certificateRoutes';
 import chatRoutes from './routes/chatRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import { chatbotReply } from './controllers/chatbotController';
+import { otpLimiter } from './middleware/otpRateLimiter';
 
 const app = express();
 const isDevelopment = config.nodeEnv === 'development';
+
+// Render/Reverse proxy support for correct client IP in rate limiting
+app.set('trust proxy', 1);
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -81,15 +85,6 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many registration attempts. Please try again later.' },
-});
-
-const otpLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 10,
-  skip: () => isDevelopment,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many OTP requests. Please wait a few minutes and try again.' },
 });
 
 app.use('/api/v1/auth/login', loginLimiter);

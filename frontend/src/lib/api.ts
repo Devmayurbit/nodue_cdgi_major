@@ -1,9 +1,12 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api/v1'
+).replace(/\/$/, '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -63,6 +66,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      window.alert('Request timeout. Please try again.');
+      return Promise.reject(error);
+    }
+
+    if (!error.response) {
+      window.alert('Network error. Please check your connection and try again.');
       return Promise.reject(error);
     }
 

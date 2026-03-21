@@ -11,6 +11,7 @@ import {
   departmentApprove,
   adminApprove,
   superAdminApprove,
+  cancelNoDues,
 } from '../controllers/noDuesController';
 
 const router = Router();
@@ -18,6 +19,7 @@ const router = Router();
 // Student
 router.post('/', authenticate, authorize(UserRole.STUDENT), upload.array('attachments', 5), submitNoDues);
 router.get('/my', authenticate, authorize(UserRole.STUDENT), getMyNoDues);
+router.put('/:id/cancel', authenticate, authorize(UserRole.STUDENT), cancelNoDues);
 
 // All authorized roles can view
 router.get('/', authenticate, authorize(UserRole.FACULTY, UserRole.ADMIN, UserRole.SUPERADMIN), getAllNoDues);

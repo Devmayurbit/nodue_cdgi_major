@@ -3,16 +3,33 @@ import crypto from 'crypto';
 import { config } from '../config';
 import OtpCode from '../models/OtpCode';
 
+const withTimeout = async <T>(promise: Promise<T>, ms = 10000): Promise<T> => {
+  return await new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Email request timed out.')), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+};
+
 const createTransporter = () =>
   nodemailer.createTransport({
-    host: config.email.host,
-    port: config.email.port,
-    secure: false,
+    service: 'gmail',
     auth: {
-      user: config.email.user,
-      pass: config.email.pass,
+      user: process.env.EMAIL_USER || config.email.user,
+      pass: process.env.EMAIL_PASS || config.email.pass,
     },
-    tls: { rejectUnauthorized: false },
+    pool: true,
+    maxConnections: 2,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   });
 
 export const sendVerificationEmail = async (
@@ -22,7 +39,7 @@ export const sendVerificationEmail = async (
   try {
     const verificationUrl = `${config.frontendUrl}/verify-email?token=${token}`;
     const transporter = createTransporter();
-    await transporter.sendMail({
+    await withTimeout(transporter.sendMail({
       from: config.email.from,
       to: email,
       subject: 'CDGI No-Dues - Verify Your Email',
@@ -37,7 +54,7 @@ export const sendVerificationEmail = async (
           <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
         </div>
       `,
-    });
+    }));
     return true;
   } catch (error) {
     console.error('Email send failed:', error);
@@ -52,12 +69,12 @@ export const sendNotificationEmail = async (
 ): Promise<boolean> => {
   try {
     const transporter = createTransporter();
-    await transporter.sendMail({
+    await withTimeout(transporter.sendMail({
       from: config.email.from,
       to: email,
       subject,
       html,
-    });
+    }));
     return true;
   } catch {
     return false;
@@ -228,7 +245,7 @@ export const verifyOTP = async (email: string, otp: string): Promise<boolean> =>
 export const sendOTPEmail = async (email: string, otp: string): Promise<boolean> => {
   try {
     const transporter = createTransporter();
-    await transporter.sendMail({
+    await withTimeout(transporter.sendMail({
       from: config.email.from,
       to: email,
       subject: 'CDGI No-Dues - Email Verification OTP',
@@ -243,7 +260,7 @@ export const sendOTPEmail = async (email: string, otp: string): Promise<boolean>
           <p style="color:#999;font-size:12px;margin-top:20px;">If you did not request this, please ignore.</p>
         </div>
       `,
-    });
+    }));
     return true;
   } catch (error) {
     console.error('OTP email send failed:', error);

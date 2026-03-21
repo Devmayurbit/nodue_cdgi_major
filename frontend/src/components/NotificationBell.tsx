@@ -10,7 +10,8 @@ const NotificationBell: React.FC = () => {
   const { data } = useQuery({
     queryKey: ['myNotifications', 'bell'],
     queryFn: () => api.get('/notifications/my?limit=8').then((r) => r.data),
-    refetchInterval: 15000,
+    refetchInterval: 45000,
+    retry: false,
   });
 
   const markReadMutation = useMutation({

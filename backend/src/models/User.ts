@@ -31,6 +31,9 @@ export interface IUser extends Document {
   accountLockedUntil?: Date;
   refreshToken?: string;
   deviceTokens: string[];
+  totalRequests: number;
+  semesterRequests: Map<string, number>;
+  year?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +63,9 @@ const UserSchema = new Schema<IUser>(
     accountLockedUntil: { type: Date },
     refreshToken: { type: String, select: false },
     deviceTokens: [{ type: String }],
+    totalRequests: { type: Number, default: 0 },
+    semesterRequests: { type: Map, of: Number, default: {} },
+    year: { type: Number, min: 1, max: 4 },
   },
   { timestamps: true }
 );

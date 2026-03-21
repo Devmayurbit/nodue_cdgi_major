@@ -11,15 +11,8 @@ import { config } from '../config';
 
 const defaultDepartments = [
   { name: 'Computer Science & Engineering', code: 'CSE', description: 'Department of CSE' },
-  { name: 'Electronics & Communication', code: 'ECE', description: 'Department of ECE' },
-  { name: 'Mechanical Engineering', code: 'ME', description: 'Department of ME' },
-  { name: 'Civil Engineering', code: 'CE', description: 'Department of CE' },
-  { name: 'Electrical Engineering', code: 'EE', description: 'Department of EE' },
   { name: 'Information Technology', code: 'IT', description: 'Department of IT' },
-  { name: 'Library', code: 'LIBRARY', description: 'Central Library' },
-  { name: 'Accounts', code: 'ACCOUNTS', description: 'Accounts Department' },
-  { name: 'Hostel', code: 'HOSTEL', description: 'Hostel Administration' },
-  { name: 'Laboratory', code: 'LAB', description: 'Central Laboratory' },
+  { name: 'Mechanical Engineering', code: 'MECH', description: 'Department of MECH' },
 ];
 
 const seed = async () => {

@@ -16,6 +16,7 @@ import {
   sendOTPEmail,
   sendPasswordResetEmail,
 } from '../services/emailService';
+import { resetOtpRateLimit } from '../middleware/otpRateLimiter';
 
 const signToken = (id: string, role: string): string => {
   return jwt.sign({ id, role }, config.jwt.secret, {
@@ -512,6 +513,7 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    resetOtpRateLimit(req);
     res.json({ success: true, message: 'OTP sent to your email.' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

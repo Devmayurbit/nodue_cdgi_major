@@ -11,7 +11,17 @@ import { NotificationType } from '../models/Notification';
 import { sendNotificationEmail } from '../services/emailService';
 import { uploadMulterFile } from '../services/storageService';
 
-const MIN_REQUIRED_FACULTY_APPROVALS = 3;
+const getStudentYear = (year?: number, semester?: number): number => {
+  if (year && year >= 1 && year <= 4) return year;
+  if (!semester) return 1;
+  return Math.min(4, Math.max(1, Math.ceil(semester / 2)));
+};
+
+const getRequiredFacultyApprovals = (year: number): number => {
+  if (year === 1 || year === 2) return 5;
+  if (year === 3) return 4;
+  return 3;
+};
 
 const allAdminDepartmentsApproved = (noDues: any): boolean => {
   return [
@@ -94,15 +104,24 @@ const ensureSubjectApprovals = async (noDues: any): Promise<number> => {
   return rows.length;
 };
 
-const getSubjectApprovalSummary = async (noDuesId: any): Promise<{
+const getSubjectApprovalSummary = async (noDuesId: any, requiredApprovals: number): Promise<{
   hasApprovals: boolean;
   anyRejected: boolean;
   allCompleted: boolean;
   totalApprovals: number;
+  approvedCount: number;
+  requiredApprovals: number;
 }> => {
   const approvals = await SubjectApproval.find({ noDues: noDuesId });
   if (approvals.length === 0) {
-    return { hasApprovals: false, anyRejected: false, allCompleted: false, totalApprovals: 0 };
+    return {
+      hasApprovals: false,
+      anyRejected: false,
+      allCompleted: false,
+      totalApprovals: 0,
+      approvedCount: 0,
+      requiredApprovals,
+    };
   }
 
   const anyRejected = approvals.some(
@@ -112,14 +131,23 @@ const getSubjectApprovalSummary = async (noDuesId: any): Promise<{
       a.labStatus === ApprovalStatus.REJECTED
   );
 
-  const allCompleted = approvals.length >= MIN_REQUIRED_FACULTY_APPROVALS && approvals.every(
+  const approvedCount = approvals.filter(
     (a) =>
       a.assignmentStatus === ApprovalStatus.APPROVED &&
       a.labStatus === ApprovalStatus.APPROVED &&
       a.status === ApprovalStatus.APPROVED
-  );
+  ).length;
 
-  return { hasApprovals: true, anyRejected, allCompleted, totalApprovals: approvals.length };
+  const allCompleted = approvedCount >= requiredApprovals;
+
+  return {
+    hasApprovals: true,
+    anyRejected,
+    allCompleted,
+    totalApprovals: approvals.length,
+    approvedCount,
+    requiredApprovals,
+  };
 };
 
 const attachSubjectApprovals = async (rows: any[]): Promise<any[]> => {
@@ -262,7 +290,7 @@ export const submitNoDues = async (req: AuthRequest, res: Response): Promise<voi
     // Check for existing active request
     const existing = await NoDues.findOne({
       student: user._id,
-      status: { $nin: [NoDuesStatus.REJECTED] },
+      status: { $nin: [NoDuesStatus.REJECTED, NoDuesStatus.CANCELLED] },
     });
     if (existing) {
       res.status(409).json({ success: false, message: 'You already have an active No-Dues request.' });
@@ -287,6 +315,25 @@ export const submitNoDues = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    const totalRequests = await NoDues.countDocuments({
+      student: user._id,
+      status: { $ne: NoDuesStatus.CANCELLED },
+    });
+
+    const semesterRequests = await NoDues.countDocuments({
+      student: user._id,
+      semester: user.semester,
+      status: { $ne: NoDuesStatus.CANCELLED },
+    });
+
+    if (totalRequests >= 16 || semesterRequests >= 2) {
+      res.status(400).json({ success: false, message: 'Max requests reached' });
+      return;
+    }
+
+    const studentYear = getStudentYear((user as any).year, user.semester);
+    const requiredApprovals = getRequiredFacultyApprovals(studentYear);
+
     const availableFacultyCount = await User.countDocuments({
       role: UserRole.FACULTY,
       department: user.department,
@@ -296,10 +343,10 @@ export const submitNoDues = async (req: AuthRequest, res: Response): Promise<voi
       isActive: true,
     });
 
-    if (availableFacultyCount < MIN_REQUIRED_FACULTY_APPROVALS) {
+    if (availableFacultyCount < requiredApprovals) {
       res.status(400).json({
         success: false,
-        message: `At least ${MIN_REQUIRED_FACULTY_APPROVALS} active faculty (same department, section, semester) are required before submission.`,
+        message: `At least ${requiredApprovals} active faculty (same department, section, semester) are required before submission.`,
       });
       return;
     }
@@ -325,6 +372,12 @@ export const submitNoDues = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     await ensureSubjectApprovals(noDues);
+
+    user.totalRequests = totalRequests + 1;
+    const semesterKey = String(user.semester);
+    const currentSemesterCount = Number((user.semesterRequests as any)?.get?.(semesterKey) || 0);
+    (user.semesterRequests as any).set(semesterKey, currentSemesterCount + 1);
+    await user.save();
 
     const subjectApprovals = await SubjectApproval.find({ noDues: noDues._id }).populate('faculty', 'email');
     const facultyIds = subjectApprovals.map((sa) => sa.faculty as any).map((f) => f._id);
@@ -570,7 +623,9 @@ export const facultyApprove = async (req: AuthRequest, res: Response): Promise<v
     setSubjectApprovalStatus(subjectApproval);
     await subjectApproval.save();
 
-    const summary = await getSubjectApprovalSummary(noDues._id);
+    const student = await User.findById(noDues.student).select('year semester');
+    const requiredApprovals = getRequiredFacultyApprovals(getStudentYear((student as any)?.year, noDues.semester));
+    const summary = await getSubjectApprovalSummary(noDues._id, requiredApprovals);
     syncLegacyFacultyClearances(noDues, summary, user._id, remarks);
 
     if (summary.anyRejected) {
@@ -647,11 +702,13 @@ export const departmentApprove = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const subjectSummary = await getSubjectApprovalSummary(noDues._id);
+    const student = await User.findById(noDues.student).select('year semester');
+    const requiredApprovals = getRequiredFacultyApprovals(getStudentYear((student as any)?.year, noDues.semester));
+    const subjectSummary = await getSubjectApprovalSummary(noDues._id, requiredApprovals);
     if (!subjectSummary.hasApprovals || !subjectSummary.allCompleted) {
       res.status(400).json({
         success: false,
-        message: `Admin verification can start only after all subject-wise approvals are completed with minimum ${MIN_REQUIRED_FACULTY_APPROVALS} faculty approvals.`,
+        message: `Admin verification can start only after subject-wise approvals are completed with minimum ${requiredApprovals} faculty approvals.`,
       });
       return;
     }
@@ -746,11 +803,13 @@ export const adminApprove = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const summary = await getSubjectApprovalSummary(noDues._id);
+    const student = await User.findById(noDues.student).select('year semester');
+    const requiredApprovals = getRequiredFacultyApprovals(getStudentYear((student as any)?.year, noDues.semester));
+    const summary = await getSubjectApprovalSummary(noDues._id, requiredApprovals);
     if (!summary.hasApprovals || !summary.allCompleted) {
       res.status(400).json({
         success: false,
-        message: `Admin verification can start only after all subject-wise approvals are completed with minimum ${MIN_REQUIRED_FACULTY_APPROVALS} faculty approvals.`,
+        message: `Admin verification can start only after subject-wise approvals are completed with minimum ${requiredApprovals} faculty approvals.`,
       });
       return;
     }
@@ -855,11 +914,13 @@ export const superAdminApprove = async (req: AuthRequest, res: Response): Promis
     };
 
     if (status === 'approved') {
-      const summary = await getSubjectApprovalSummary(noDues._id);
+      const student = await User.findById(noDues.student).select('year semester');
+      const requiredApprovals = getRequiredFacultyApprovals(getStudentYear((student as any)?.year, noDues.semester));
+      const summary = await getSubjectApprovalSummary(noDues._id, requiredApprovals);
       if (!summary.hasApprovals || !summary.allCompleted) {
         res.status(400).json({
           success: false,
-          message: `Cannot grant HOD approval before all subject-wise faculty approvals are complete with minimum ${MIN_REQUIRED_FACULTY_APPROVALS} faculty approvals.`,
+          message: `Cannot grant HOD approval before subject-wise faculty approvals are complete with minimum ${requiredApprovals} faculty approvals.`,
         });
         return;
       }
@@ -914,6 +975,55 @@ export const superAdminApprove = async (req: AuthRequest, res: Response): Promis
 
     const withApprovals = await attachSubjectApprovals([noDues]);
     res.json({ success: true, message: `HOD ${status}.`, data: withApprovals[0] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /api/v1/nodues/:id/cancel - Student cancellation for pending request only
+export const cancelNoDues = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = req.user!;
+    const noDues = await NoDues.findById(req.params.id);
+    if (!noDues) {
+      res.status(404).json({ success: false, message: 'No-Dues request not found.' });
+      return;
+    }
+
+    if ((noDues.student as any).toString() !== (user._id as any).toString()) {
+      res.status(403).json({ success: false, message: 'Not allowed to cancel this request.' });
+      return;
+    }
+
+    // Pending means submitted and no approvals started yet.
+    const approvalsStarted =
+      noDues.facultyApproval?.status !== ApprovalStatus.PENDING ||
+      noDues.adminApproval?.status !== ApprovalStatus.PENDING ||
+      noDues.superAdminApproval?.status !== ApprovalStatus.PENDING;
+
+    if (noDues.status !== NoDuesStatus.SUBMITTED || approvalsStarted) {
+      res.status(400).json({
+        success: false,
+        message: 'Cancellation is allowed only while request is pending.',
+      });
+      return;
+    }
+
+    noDues.status = NoDuesStatus.CANCELLED;
+    await noDues.save();
+
+    const semesterKey = String(noDues.semester);
+    const currentSemesterCount = Number((user.semesterRequests as any)?.get?.(semesterKey) || 0);
+    if (currentSemesterCount > 0) {
+      (user.semesterRequests as any).set(semesterKey, currentSemesterCount - 1);
+    }
+    if ((user.totalRequests || 0) > 0) {
+      user.totalRequests = (user.totalRequests || 0) - 1;
+    }
+    await user.save();
+
+    await createAuditLog(user._id as any, 'NODUES_CANCEL', 'NoDues', noDues._id as any, 'No-Dues request cancelled by student.');
+    res.json({ success: true, message: 'No-Dues request cancelled successfully.' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
