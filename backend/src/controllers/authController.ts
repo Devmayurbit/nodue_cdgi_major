@@ -495,15 +495,15 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
     }
 
     const otp = generateOTP();
-    storeOTP(email, otp);
+    await storeOTP(email, otp);
 
     const sent = await sendOTPEmail(email, otp);
     if (!sent) {
-      if (config.nodeEnv === 'development') {
-        // Dev fallback: return OTP directly so frontend can auto-fill it
+      if (config.nodeEnv === 'development' || config.features.allowOtpFallbackInProduction) {
+        // Fallback: return OTP so frontend can continue registration when SMTP fails.
         res.json({
           success: true,
-          message: `OTP generated (email unavailable in dev). OTP: ${otp}`,
+          message: `OTP generated (email unavailable). OTP: ${otp}`,
           devOtp: otp,
         });
         return;
@@ -527,7 +527,7 @@ export const verifyOtpEndpoint = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const valid = verifyOTP(email, otp);
+    const valid = await verifyOTP(email, otp);
     if (!valid) {
       res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
       return;

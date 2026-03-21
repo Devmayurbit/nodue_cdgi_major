@@ -1,11 +1,12 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { config } from '../config';
+import OtpCode from '../models/OtpCode';
 
 const createTransporter = () =>
   nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
+    host: config.email.host,
+    port: config.email.port,
     secure: false,
     auth: {
       user: config.email.user,
@@ -194,26 +195,33 @@ export const generateOfflineCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// In-memory OTP store (production: use Redis)
-const otpStore = new Map<string, { otp: string; expires: number }>();
-
 export const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-export const storeOTP = (email: string, otp: string): void => {
-  otpStore.set(email.toLowerCase(), { otp, expires: Date.now() + 5 * 60 * 1000 }); // 5 min
+export const storeOTP = async (email: string, otp: string): Promise<void> => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+  await OtpCode.findOneAndUpdate(
+    { email: normalizedEmail },
+    { email: normalizedEmail, code: otp, expiresAt },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 };
 
-export const verifyOTP = (email: string, otp: string): boolean => {
-  const record = otpStore.get(email.toLowerCase());
+export const verifyOTP = async (email: string, otp: string): Promise<boolean> => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const record = await OtpCode.findOne({ email: normalizedEmail });
+
   if (!record) return false;
-  if (Date.now() > record.expires) {
-    otpStore.delete(email.toLowerCase());
+  if (record.expiresAt.getTime() < Date.now()) {
+    await OtpCode.deleteOne({ _id: record._id });
     return false;
   }
-  if (record.otp !== otp) return false;
-  otpStore.delete(email.toLowerCase());
+  if (record.code !== otp) return false;
+
+  await OtpCode.deleteOne({ _id: record._id });
   return true;
 };
 

@@ -24,6 +24,12 @@ export const config = {
     from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER || 'noreply@cdgi.edu.in',
   },
 
+  features: {
+    // Emergency fallback: allow OTP response when SMTP fails in production.
+    // Keep false in normal production usage.
+    allowOtpFallbackInProduction: process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION === 'true',
+  },
+
   accessKeys: {
     faculty: process.env.FACULTY_ACCESS_KEY || 'CDGI-FACULTY-2026',
     admin: process.env.ADMIN_ACCESS_KEY || 'CDGI-ADMIN-2026',
@@ -47,6 +53,10 @@ export const config = {
   },
 
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrls: (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean),
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '10', 10),
   storage: {
     provider: process.env.FILE_STORAGE_PROVIDER || 'local',
