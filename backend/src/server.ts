@@ -46,7 +46,8 @@ app.use(
         return;
       }
 
-      callback(new Error('Not allowed by CORS'));
+      // Do not throw for unmatched origins; just disable CORS headers for that request.
+      callback(null, false);
     },
     credentials: true,
   })
