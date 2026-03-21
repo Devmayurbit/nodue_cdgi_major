@@ -141,7 +141,7 @@ const RegisterPage: React.FC = () => {
     try {
       const { data } = await api.post('/auth/send-otp', { email: form.email });
       setOtpSent(true);
-      if (data.devOtp) {
+      if (import.meta.env.DEV && data.devOtp) {
         setOtp(data.devOtp);
         toast.success(`Dev mode OTP: ${data.devOtp}`, { duration: 8000 });
       } else {
