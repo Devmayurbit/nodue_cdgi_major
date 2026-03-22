@@ -58,6 +58,67 @@ const NoDuesDetailPage: React.FC = () => {
         />
       </div>
 
+      {Array.isArray(nd.subjectApprovals) && nd.subjectApprovals.length > 0 && (
+        <div className="glass-card p-6">
+          <h2 className="font-semibold mb-4">Subject-wise Faculty Approvals</h2>
+          <div className="overflow-x-auto -mx-2 sm:mx-0">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-[var(--color-text-secondary)] border-b border-[var(--color-border)]">
+                  <th className="py-2 px-2 sm:px-3">Faculty</th>
+                  <th className="py-2 px-2 sm:px-3">Subject</th>
+                  <th className="py-2 px-2 sm:px-3">Dept / Sec / Sem</th>
+                  <th className="py-2 px-2 sm:px-3">Assignment</th>
+                  <th className="py-2 px-2 sm:px-3">Lab</th>
+                  <th className="py-2 px-2 sm:px-3">Overall</th>
+                  <th className="py-2 px-2 sm:px-3">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nd.subjectApprovals.map((sa: any) => {
+                  const faculty = sa.faculty || {};
+                  const statusChip = (value: string | undefined) => (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                        value === 'approved'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : value === 'rejected'
+                          ? 'bg-rose-500/10 text-rose-400'
+                          : 'bg-amber-500/10 text-amber-400'
+                      }`}
+                    >
+                      {value || 'pending'}
+                    </span>
+                  );
+
+                  return (
+                    <tr key={sa._id} className="border-t border-[var(--color-border)]">
+                      <td className="py-2.5 px-2 sm:px-3 whitespace-nowrap">
+                        <div className="font-medium">{faculty.name || 'Unknown'}</div>
+                        <div className="text-xs text-[var(--color-text-secondary)]">{faculty.email}</div>
+                      </td>
+                      <td className="py-2.5 px-2 sm:px-3 whitespace-nowrap">{sa.subject}</td>
+                      <td className="py-2.5 px-2 sm:px-3 whitespace-nowrap text-xs text-[var(--color-text-secondary)]">
+                        <div>{faculty.department || 'N/A'}</div>
+                        <div>
+                          Sec {faculty.section || '-'} · Sem {faculty.semester || '-'}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2 sm:px-3">{statusChip(sa.assignmentStatus)}</td>
+                      <td className="py-2.5 px-2 sm:px-3">{statusChip(sa.labStatus)}</td>
+                      <td className="py-2.5 px-2 sm:px-3">{statusChip(sa.status)}</td>
+                      <td className="py-2.5 px-2 sm:px-3 max-w-xs text-xs text-[var(--color-text-secondary)]">
+                        {sa.remarks || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {nd.certificateId && (
         <div className="glass-card p-6">
           <h2 className="font-semibold mb-2">Certificate Available</h2>

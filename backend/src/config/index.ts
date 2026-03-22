@@ -26,12 +26,10 @@ export const config = {
 
   features: {
     // Emergency fallback: allow OTP response when SMTP fails in production.
-    // By default this is enabled so registration never blocks just
-    // because email is temporarily down. Set ALLOW_OTP_FALLBACK_IN_PRODUCTION
-    // to "false" explicitly if you want to disable this.
-    allowOtpFallbackInProduction: process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION
-      ? process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION === 'true'
-      : true,
+    // For maximum security on the live college domain, this is disabled
+    // by default; set ALLOW_OTP_FALLBACK_IN_PRODUCTION="true" only when
+    // email is completely unavailable and you explicitly accept the risk.
+    allowOtpFallbackInProduction: process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION === 'true',
   },
 
   accessKeys: {

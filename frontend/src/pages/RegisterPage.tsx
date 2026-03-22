@@ -142,14 +142,12 @@ const RegisterPage: React.FC = () => {
       const { data } = await api.post('/auth/send-otp', { email: form.email });
       setOtpSent(true);
 
-      if (data?.devOtp) {
-        // Backend may return the OTP directly when email
-        // delivery fails or is disabled. Show it even in
-        // production so students are not blocked.
+      if (data?.devOtp && import.meta.env.DEV) {
+        // In development only, auto-fill and show the OTP to
+        // speed up testing. In production the student must
+        // verify using the code received in their email.
         setOtp(data.devOtp);
-        toast.success(`Your OTP is ${data.devOtp}. Please enter and verify.`, {
-          duration: 12000,
-        });
+        toast.success(`Dev OTP: ${data.devOtp}`, { duration: 8000 });
       } else {
         toast.success('OTP sent to your email!');
       }
