@@ -6,7 +6,10 @@ const API_BASE_URL = (
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  // Render free tier can be slow on cold start; use a higher
+  // timeout so registration and other first requests don't fail
+  // with a client-side ECONNABORTED error.
+  timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });
 

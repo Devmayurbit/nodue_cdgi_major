@@ -26,8 +26,12 @@ export const config = {
 
   features: {
     // Emergency fallback: allow OTP response when SMTP fails in production.
-    // Keep false in normal production usage.
-    allowOtpFallbackInProduction: process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION === 'true',
+    // By default this is enabled so registration never blocks just
+    // because email is temporarily down. Set ALLOW_OTP_FALLBACK_IN_PRODUCTION
+    // to "false" explicitly if you want to disable this.
+    allowOtpFallbackInProduction: process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION
+      ? process.env.ALLOW_OTP_FALLBACK_IN_PRODUCTION === 'true'
+      : true,
   },
 
   accessKeys: {

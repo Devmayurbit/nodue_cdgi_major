@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { validate } from '../middleware/validate';
+import { otpLimiter } from '../middleware/otpRateLimiter';
 import { authenticate } from '../middleware/auth';
 import {
   register,
@@ -80,7 +81,7 @@ router.post('/reset-password', validate([
   body('token').notEmpty().withMessage('Reset token is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
 ]), resetPassword);
-router.post('/send-otp', validate([body('email').isEmail().withMessage('Valid email required')]), sendOtp);
+router.post('/send-otp', otpLimiter, validate([body('email').isEmail().withMessage('Valid email required')]), sendOtp);
 router.post('/verify-otp', validate([body('email').isEmail(), body('otp').isLength({ min: 6, max: 6 })]), verifyOtpEndpoint);
 router.post('/refresh-token', refreshToken);
 router.get('/me', authenticate, getMe);

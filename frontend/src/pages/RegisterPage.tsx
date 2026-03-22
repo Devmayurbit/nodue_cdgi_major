@@ -141,9 +141,15 @@ const RegisterPage: React.FC = () => {
     try {
       const { data } = await api.post('/auth/send-otp', { email: form.email });
       setOtpSent(true);
-      if (import.meta.env.DEV && data.devOtp) {
+
+      if (data?.devOtp) {
+        // Backend may return the OTP directly when email
+        // delivery fails or is disabled. Show it even in
+        // production so students are not blocked.
         setOtp(data.devOtp);
-        toast.success(`Dev mode OTP: ${data.devOtp}`, { duration: 8000 });
+        toast.success(`Your OTP is ${data.devOtp}. Please enter and verify.`, {
+          duration: 12000,
+        });
       } else {
         toast.success('OTP sent to your email!');
       }
@@ -217,7 +223,9 @@ const RegisterPage: React.FC = () => {
           (selectedRole === 'student' || selectedRole === 'faculty') && form.semester
             ? parseInt(form.semester)
             : undefined,
-        otpVerified: selectedRole === 'student' ? true : undefined,
+        // Only mark OTP as verified when the user has
+        // successfully completed the OTP flow.
+        otpVerified: selectedRole === 'student' ? otpVerified : undefined,
         role: selectedRole,
         accessKey: selectedRole !== 'student' ? form.accessKey : undefined,
       });

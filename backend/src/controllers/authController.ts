@@ -499,16 +499,21 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
     await storeOTP(email, otp);
 
     const sent = await sendOTPEmail(email, otp);
+
+    if (!sent && (config.nodeEnv === 'development' || config.features.allowOtpFallbackInProduction)) {
+      // Fallback: return OTP in response when SMTP fails so
+      // registration can still proceed. Frontend shows devOtp
+      // to the user even in production.
+      resetOtpRateLimit(req);
+      res.json({
+        success: true,
+        message: 'OTP generated. Email delivery is temporarily unavailable.',
+        devOtp: otp,
+      });
+      return;
+    }
+
     if (!sent) {
-      if (config.nodeEnv === 'development' || config.features.allowOtpFallbackInProduction) {
-        // Fallback: return OTP so frontend can continue registration when SMTP fails.
-        res.json({
-          success: true,
-          message: `OTP generated (email unavailable). OTP: ${otp}`,
-          devOtp: otp,
-        });
-        return;
-      }
       res.status(500).json({ success: false, message: 'Failed to send OTP. Check your email address or try again.' });
       return;
     }
