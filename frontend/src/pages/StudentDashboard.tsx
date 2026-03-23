@@ -29,6 +29,13 @@ const StudentDashboard: React.FC = () => {
     refetchInterval: 15000,
   });
 
+  const { data: facultySummary } = useQuery({
+    queryKey: ['facultySummary'],
+    queryFn: () => api.get('/auth/faculty-summary').then((r) => r.data.data),
+    refetchInterval: 60000,
+    retry: 1,
+  });
+
   const latestNoDues = noDuesData?.[0];
 
   const getTimelineSteps = (nd: any) => {
@@ -96,6 +103,75 @@ const StudentDashboard: React.FC = () => {
         </Link>
       </div>
 
+      {/* Faculty summary (same dept/section/semester) */}
+      <div className="glass-card p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-lg">Faculty in your class</h2>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Department {user?.department} • Section {user?.section} • Semester {user?.semester}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">{facultySummary?.facultyCount ?? 0}</div>
+            <div className="text-xs text-[var(--color-text-secondary)]">Active faculty</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-surface)]/60">
+            <p className="text-sm font-medium mb-2">Requirement for No-Dues submission</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Required approvals: <span className="font-semibold text-[var(--color-text)]">{facultySummary?.requiredApprovals ?? '-'}</span>
+            </p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+              If you see “more than 3 required”, it’s based on your year (derived from semester).
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-surface)]/60">
+            <p className="text-sm font-medium mb-2">Faculty-wise chart (by subject)</p>
+            {Array.isArray(facultySummary?.subjects) && facultySummary.subjects.length > 0 ? (
+              (() => {
+                const max = Math.max(...facultySummary.subjects.map((s: any) => Number(s.count) || 0), 1);
+                return (
+                  <div className="space-y-2">
+                    {facultySummary.subjects.slice(0, 8).map((s: any) => (
+                      <div key={s.subject} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate pr-2">{s.subject}</span>
+                          <span className="text-[var(--color-text-secondary)]">{s.count}</span>
+                        </div>
+                        <div className="grid grid-cols-10 gap-1">
+                          {Array.from({ length: 10 }).map((_, i) => {
+                            const filled = i < Math.round(((Number(s.count) || 0) / max) * 10);
+                            return (
+                              <div
+                                key={i}
+                                className={
+                                  `h-2 rounded ${filled ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    {facultySummary.subjects.length > 8 && (
+                      <p className="text-xs text-[var(--color-text-secondary)]">+{facultySummary.subjects.length - 8} more subjects</p>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                No faculty found for your department/section/semester yet.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Progress & Timeline */}
       <div className="grid lg:grid-cols-2 gap-6">
         {latestNoDues ? (
@@ -108,10 +184,19 @@ const StudentDashboard: React.FC = () => {
                   <span className="font-semibold">{Math.round(progressPercent)}%</span>
                 </div>
                 <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-700"
-                    style={{ width: `${progressPercent}%` }}
-                  />
+                  <div className="grid grid-cols-8 gap-1 h-3 p-0.5">
+                    {Array.from({ length: totalSteps }).map((_, i) => {
+                      const filled = i < approvedCount;
+                      return (
+                        <div
+                          key={i}
+                          className={
+                            `h-full rounded ${filled ? 'bg-gradient-to-r from-blue-500 to-green-500' : 'bg-gray-300 dark:bg-gray-600'}`
+                          }
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-3">

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 import { UserPlus, Mail, Lock, Building2, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const departments = [
   'Computer Science & Engineering',
@@ -18,7 +19,19 @@ const departments = [
 ];
 
 const CreateAccountsPage: React.FC = () => {
-  const [role, setRole] = useState<'faculty' | 'admin'>('faculty');
+  const { user } = useAuth();
+
+  const canCreateHod = useMemo(() => {
+    const dept = (user?.department || '').trim().toLowerCase();
+    return user?.role === 'superadmin' && dept === 'administration';
+  }, [user?.department, user?.role]);
+
+  const roleOptions = useMemo(
+    () => (canCreateHod ? (['faculty', 'admin', 'hod'] as const) : (['faculty', 'admin'] as const)),
+    [canCreateHod]
+  );
+
+  const [role, setRole] = useState<'faculty' | 'admin' | 'hod'>('faculty');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,11 +86,17 @@ const CreateAccountsPage: React.FC = () => {
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const endpoint = role === 'faculty' ? '/superadmin/create-faculty' : '/superadmin/create-admin';
+      const endpoint =
+        role === 'faculty'
+          ? '/superadmin/create-faculty'
+          : role === 'admin'
+            ? '/superadmin/create-admin'
+            : '/superadmin/create-hod';
       return api.post(endpoint, payload).then((r) => r.data);
     },
     onSuccess: (data) => {
-      toast.success(`${role === 'faculty' ? 'Faculty' : 'Admin'} account created!`);
+      const label = role === 'faculty' ? 'Faculty' : role === 'admin' ? 'Admin' : 'HOD';
+      toast.success(`${label} account created!`);
       setName('');
       setEmail('');
       setPassword('');
@@ -92,6 +111,12 @@ const CreateAccountsPage: React.FC = () => {
       toast.error(err.response?.data?.message || 'Failed to create account');
     },
   });
+
+  useEffect(() => {
+    if (!canCreateHod && role === 'hod') {
+      setRole('faculty');
+    }
+  }, [canCreateHod, role]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +157,7 @@ const CreateAccountsPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Create Account</h1>
-            <p className="text-[var(--color-text-secondary)] text-sm">Add new faculty or admin users</p>
+            <p className="text-[var(--color-text-secondary)] text-sm">Add new staff users</p>
           </div>
         </div>
       </div>
@@ -142,7 +167,7 @@ const CreateAccountsPage: React.FC = () => {
         <div>
           <label className="block text-sm font-medium mb-2">Account Type</label>
           <div className="flex gap-3">
-            {(['faculty', 'admin'] as const).map((r) => (
+            {roleOptions.map((r) => (
               <button
                 key={r}
                 type="button"
@@ -153,10 +178,15 @@ const CreateAccountsPage: React.FC = () => {
                     : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]'
                 }`}
               >
-                {r === 'faculty' ? 'Faculty' : 'Admin'}
+                {r === 'faculty' ? 'Faculty' : r === 'admin' ? 'Admin' : 'HOD'}
               </button>
             ))}
           </div>
+          {!canCreateHod && (
+            <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+              HOD accounts can only be created by the root Super Admin.
+            </p>
+          )}
         </div>
 
         <div>
@@ -241,9 +271,9 @@ const CreateAccountsPage: React.FC = () => {
               className="input-field pl-10"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min 6 characters"
+              placeholder="Min 8 characters"
               required
-              minLength={6}
+              minLength={8}
             />
           </div>
         </div>
@@ -313,7 +343,9 @@ const CreateAccountsPage: React.FC = () => {
           className="btn-primary w-full flex items-center justify-center gap-2"
         >
           <UserPlus size={16} />
-          {createMutation.isPending ? 'Creating...' : `Create ${role === 'faculty' ? 'Faculty' : 'Admin'} Account`}
+          {createMutation.isPending
+            ? 'Creating...'
+            : `Create ${role === 'faculty' ? 'Faculty' : role === 'admin' ? 'Admin' : 'HOD'} Account`}
         </button>
       </form>
     </div>

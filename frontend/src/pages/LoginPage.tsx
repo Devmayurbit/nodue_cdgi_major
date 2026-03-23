@@ -200,7 +200,7 @@ const LoginPage: React.FC = () => {
                     <input
                       type={showAccessKey ? 'text' : 'password'}
                       className="input-field !pr-10"
-                      placeholder={`CDGI-${selectedRole.toUpperCase()}-2026`}
+                      placeholder="Enter access key"
                       value={form.accessKey}
                       onChange={(e) => setForm({ ...form, accessKey: e.target.value })}
                     />
@@ -245,13 +245,7 @@ const LoginPage: React.FC = () => {
               )}
               {(selectedRole === 'faculty' || selectedRole === 'admin') && (
                 <p className="text-sm text-center text-[var(--color-text-secondary)]">
-                  New {selectedRole}?{' '}
-                  <Link
-                    href={`/register?role=${selectedRole}`}
-                    className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
-                  >
-                    Register with access key
-                  </Link>
+                  Faculty/Admin accounts are created by HOD/Super Admin only.
                 </p>
               )}
             </div>

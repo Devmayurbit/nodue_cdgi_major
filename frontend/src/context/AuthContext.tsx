@@ -35,7 +35,7 @@ interface RegisterData {
   section?: string;
   subject?: string;
   semester?: number;
-  otpVerified?: boolean;
+  otpToken?: string | null;
   role?: 'student' | 'faculty' | 'admin' | 'superadmin';
   accessKey?: string;
 }
