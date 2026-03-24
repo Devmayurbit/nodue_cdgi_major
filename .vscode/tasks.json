@@ -1,0 +1,29 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "backend:dev",
+			"type": "shell",
+			"command": "cd backend; npm run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "backend:build",
+			"type": "shell",
+			"command": "cd backend; npm run build",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "frontend:build",
+			"type": "shell",
+			"command": "cd frontend; npm run build",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

@@ -7,6 +7,7 @@ export enum NotificationType {
   HOD_FINAL_READY = 'hod_final_ready',
   CERTIFICATE_GENERATED = 'certificate_generated',
   NODUES_REJECTED = 'nodues_rejected',
+  SLA_ESCALATION = 'sla_escalation',
   GENERAL = 'general',
 }
 

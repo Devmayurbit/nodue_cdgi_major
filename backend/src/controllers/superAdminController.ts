@@ -83,6 +83,69 @@ export const createAdmin = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
+// POST /api/v1/superadmin/create-hod
+export const createHod = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { name, email, password, department } = req.body;
+
+    // SECURITY: only the root college Super Admin should be able to create HOD accounts.
+    // We treat the seeded/root Super Admin as the one in department "Administration".
+    const requesterDept = (req.user?.department || '').trim().toLowerCase();
+    if (requesterDept !== 'administration') {
+      res.status(403).json({
+        success: false,
+        message: 'Only the root Super Admin can create HOD accounts.',
+      });
+      return;
+    }
+
+    const existing = await User.findOne({ email });
+    if (existing) {
+      res.status(409).json({ success: false, message: 'Email already exists.' });
+      return;
+    }
+
+    if (!department || typeof department !== 'string' || !department.trim()) {
+      res.status(400).json({ success: false, message: 'Department is required.' });
+      return;
+    }
+
+    // Enforce one HOD per department
+    const existingDeptHod = await User.findOne({ role: UserRole.SUPERADMIN, department: department.trim() });
+    if (existingDeptHod) {
+      res.status(409).json({
+        success: false,
+        message: `HOD already exists for department: ${department}.`,
+      });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const hod = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: UserRole.SUPERADMIN,
+      department: department.trim(),
+      isEmailVerified: true,
+      accessKeyVerified: true,
+      isActive: true,
+    });
+
+    await createAuditLog(req.user!._id as any, 'CREATE_HOD', 'User', hod._id as any, `HOD created: ${email}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'HOD account created.',
+      data: { id: hod._id, name: hod.name, email: hod.email, department: hod.department },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // GET /api/v1/superadmin/analytics
 export const getAnalytics = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {

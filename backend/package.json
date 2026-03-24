@@ -4,10 +4,10 @@
   "description": "CDGI No-Dues Management System - Backend API",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "cross-env NODE_ENV=development ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "start:prod": "NODE_ENV=production node dist/server.js",
+    "start:prod": "cross-env NODE_ENV=production node dist/server.js",
     "seed": "ts-node src/scripts/seed.ts",
     "lint": "eslint src --ext .ts",
     "render-build": "npm install && npm run build"
@@ -43,6 +43,7 @@
     "typescript": "^5.5.4"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0"
   }

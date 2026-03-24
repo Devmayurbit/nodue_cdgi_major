@@ -10,6 +10,7 @@ import { createBulkNotifications, createNotification } from '../services/notific
 import { NotificationType } from '../models/Notification';
 import { sendNotificationEmail } from '../services/emailService';
 import { uploadMulterFile } from '../services/storageService';
+import { config } from '../config';
 
 const getStudentYear = (year?: number, semester?: number): number => {
   if (year && year >= 1 && year <= 4) return year;
@@ -18,9 +19,9 @@ const getStudentYear = (year?: number, semester?: number): number => {
 };
 
 const getRequiredFacultyApprovals = (year: number): number => {
-  if (year === 1 || year === 2) return 5;
-  if (year === 3) return 4;
-  return 3;
+  if (year === 1 || year === 2) return config.rules.requiredFacultyApprovals.y1y2;
+  if (year === 3) return config.rules.requiredFacultyApprovals.y3;
+  return config.rules.requiredFacultyApprovals.y4;
 };
 
 const allAdminDepartmentsApproved = (noDues: any): boolean => {
@@ -69,7 +70,13 @@ const setSubjectApprovalStatus = (approval: any): void => {
   approval.status = ApprovalStatus.PENDING;
 };
 
-const ensureSubjectApprovals = async (noDues: any): Promise<number> => {
+const ensureSubjectApprovals = async (noDues: any, requiredApprovals?: number): Promise<number> => {
+  // If already assigned, do not reassign (keeps workflow stable and prevents surprise changes).
+  const existingCount = await SubjectApproval.countDocuments({ noDues: noDues._id });
+  if (existingCount > 0) return existingCount;
+
+  const normalizeSubject = (s: string): string => s.trim().replace(/\s+/g, ' ');
+
   const faculty = await User.find({
     role: UserRole.FACULTY,
     department: noDues.department,
@@ -77,21 +84,62 @@ const ensureSubjectApprovals = async (noDues: any): Promise<number> => {
     semester: noDues.semester,
     subject: { $exists: true, $ne: '' },
     isActive: true,
-  }).select('_id subject');
+  }).select('_id subject name');
 
-  const rows = faculty
-    .filter((f) => (f.subject || '').trim().length > 0)
+  const cleaned = (faculty as any[])
     .map((f) => ({
-      noDues: noDues._id,
-      student: noDues.student,
-      faculty: f._id,
-      subject: (f.subject || '').trim(),
-      assignmentStatus: ApprovalStatus.PENDING,
-      labStatus: ApprovalStatus.PENDING,
-      status: ApprovalStatus.PENDING,
-    }));
+      id: f._id,
+      name: String(f.name || ''),
+      subject: normalizeSubject(String(f.subject || '')),
+    }))
+    .filter((f) => f.subject.length > 0);
 
-  if (rows.length === 0) return 0;
+  if (cleaned.length === 0) return 0;
+
+  // Auto-assignment engine:
+  // 1) Prefer one faculty per subject (unique subject coverage)
+  // 2) If still below required approvals, add extra faculty deterministically
+  const bySubject = new Map<string, { id: any; name: string; subject: string }[]>();
+  for (const f of cleaned) {
+    if (!bySubject.has(f.subject)) bySubject.set(f.subject, []);
+    bySubject.get(f.subject)!.push(f);
+  }
+
+  const uniqueSubjects = Array.from(bySubject.keys()).sort((a, b) => a.localeCompare(b));
+  const chosen: { id: any; name: string; subject: string }[] = [];
+
+  for (const subject of uniqueSubjects) {
+    const list = bySubject.get(subject)!;
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    chosen.push(list[0]);
+  }
+
+  const target = requiredApprovals ? Math.max(1, Number(requiredApprovals)) : chosen.length;
+
+  let selected = chosen;
+  if (selected.length > target) {
+    selected = selected.slice(0, target);
+  } else if (selected.length < target) {
+    const pickedIds = new Set(selected.map((x) => String(x.id)));
+    const remaining = cleaned
+      .filter((f) => !pickedIds.has(String(f.id)))
+      .sort((a, b) => (a.subject.localeCompare(b.subject) || a.name.localeCompare(b.name)));
+
+    for (const f of remaining) {
+      if (selected.length >= target) break;
+      selected.push(f);
+    }
+  }
+
+  const rows = selected.map((f) => ({
+    noDues: noDues._id,
+    student: noDues.student,
+    faculty: f.id,
+    subject: f.subject,
+    assignmentStatus: ApprovalStatus.PENDING,
+    labStatus: ApprovalStatus.PENDING,
+    status: ApprovalStatus.PENDING,
+  }));
 
   for (const row of rows) {
     await SubjectApproval.updateOne(
@@ -371,7 +419,7 @@ export const submitNoDues = async (req: AuthRequest, res: Response): Promise<voi
       attachments,
     });
 
-    await ensureSubjectApprovals(noDues);
+    await ensureSubjectApprovals(noDues, requiredApprovals);
 
     user.totalRequests = totalRequests + 1;
     const semesterKey = String(user.semester);

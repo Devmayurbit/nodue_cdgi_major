@@ -6,6 +6,7 @@ import { UserRole } from '../models/User';
 import {
   createFaculty,
   createAdmin,
+  createHod,
   getAnalytics,
   getAllUsers,
   overrideDecision,
@@ -38,6 +39,17 @@ router.post(
     body('password').isLength({ min: 8 }),
   ]),
   createAdmin
+);
+
+router.post(
+  '/create-hod',
+  validate([
+    body('name').trim().notEmpty(),
+    body('email').isEmail(),
+    body('password').isLength({ min: 8 }),
+    body('department').trim().notEmpty(),
+  ]),
+  createHod
 );
 
 router.get('/analytics', getAnalytics);

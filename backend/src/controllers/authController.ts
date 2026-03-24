@@ -7,9 +7,6 @@ import { config } from '../config';
 import { AuthRequest } from '../middleware/auth';
 import { createAuditLog } from '../services/auditService';
 import {
-  sendVerificationEmail,
-  generateVerificationToken,
-  generateOfflineCode,
   generateOTP,
   storeOTP,
   verifyOTP,
@@ -17,6 +14,18 @@ import {
   sendPasswordResetEmail,
 } from '../services/emailService';
 import { resetOtpRateLimit } from '../middleware/otpRateLimiter';
+
+const getStudentYearFromSemester = (year?: number, semester?: number): number => {
+  if (year && year >= 1 && year <= 4) return year;
+  if (!semester) return 1;
+  return Math.min(4, Math.max(1, Math.ceil(semester / 2)));
+};
+
+const getRequiredFacultyApprovals = (year: number): number => {
+  if (year === 1 || year === 2) return config.rules.requiredFacultyApprovals.y1y2;
+  if (year === 3) return config.rules.requiredFacultyApprovals.y3;
+  return config.rules.requiredFacultyApprovals.y4;
+};
 
 const signToken = (id: string, role: string): string => {
   return jwt.sign({ id, role }, config.jwt.secret, {
@@ -40,87 +49,88 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       enrollmentNumber,
       department,
       section,
-      subject,
       semester,
-      otpVerified,
+      otpToken,
       role: requestedRole,
-      accessKey,
     } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       res.status(409).json({ success: false, message: 'Email already registered.' });
       return;
     }
 
-    // Determine role and validate access key
-    let role = UserRole.STUDENT;
-    if (requestedRole === 'faculty') {
-      if (!accessKey || accessKey !== config.accessKeys.faculty) {
-        res.status(403).json({ success: false, message: 'Invalid Faculty access key. Contact HOD for the correct key.' });
+    // SECURITY: public self-registration is restricted to students only.
+    // Faculty/Admin/HOD accounts must be created by Super Admin/HOD.
+    if (requestedRole && requestedRole !== 'student') {
+      res.status(403).json({
+        success: false,
+        message: 'Only student self-registration is allowed. Contact your HOD to create staff accounts.',
+      });
+      return;
+    }
+
+    // Require server-signed OTP verification token (prevents client-side bypass).
+    if (!otpToken || typeof otpToken !== 'string') {
+      res.status(403).json({
+        success: false,
+        message: 'Email verification is required. Please verify OTP first.',
+      });
+      return;
+    }
+
+    try {
+      const decoded = jwt.verify(otpToken, config.jwt.secret) as any;
+      const tokenEmail = String(decoded?.email || '').toLowerCase().trim();
+      const purpose = decoded?.purpose;
+      if (!tokenEmail || tokenEmail !== normalizedEmail || purpose !== 'register_email') {
+        res.status(403).json({ success: false, message: 'Invalid email verification token.' });
         return;
       }
-      role = UserRole.FACULTY;
-    } else if (requestedRole === 'admin') {
-      if (!accessKey || accessKey !== config.accessKeys.admin) {
-        res.status(403).json({ success: false, message: 'Invalid Admin access key. Contact HOD for the correct key.' });
+    } catch {
+      res.status(403).json({ success: false, message: 'Expired or invalid email verification token.' });
+      return;
+    }
+
+    // Student: check enrollment uniqueness
+    if (enrollmentNumber) {
+      const existingEnrollment = await User.findOne({ enrollmentNumber });
+      if (existingEnrollment) {
+        res.status(409).json({ success: false, message: 'Enrollment number already registered.' });
         return;
-      }
-      role = UserRole.ADMIN;
-    } else if (requestedRole === 'superadmin') {
-      if (!accessKey || accessKey !== config.accessKeys.superadmin) {
-        res.status(403).json({ success: false, message: 'Invalid HOD root key. Access denied.' });
-        return;
-      }
-      role = UserRole.SUPERADMIN;
-    } else {
-      // Student: check enrollment uniqueness
-      if (enrollmentNumber) {
-        const existingEnrollment = await User.findOne({ enrollmentNumber });
-        if (existingEnrollment) {
-          res.status(409).json({ success: false, message: 'Enrollment number already registered.' });
-          return;
-        }
       }
     }
+
+    const role = UserRole.STUDENT;
 
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Faculty/Admin proven via access key → auto-verified
-    const emailVerified = role !== UserRole.STUDENT ? true : (otpVerified === true);
-
-    const verificationToken = emailVerified ? undefined : generateVerificationToken();
-    const offlineCode = emailVerified ? undefined : generateOfflineCode();
+    const emailVerified = true;
 
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role,
       enrollmentNumber: role === UserRole.STUDENT ? enrollmentNumber : undefined,
       department,
-      section: role === UserRole.STUDENT || role === UserRole.FACULTY ? section : undefined,
-      subject: role === UserRole.FACULTY ? subject : undefined,
+      section,
       semester: semester ? parseInt(semester) : undefined,
       isEmailVerified: emailVerified,
-      emailVerificationToken: verificationToken,
-      emailVerificationExpires: emailVerified ? undefined : new Date(Date.now() + 24 * 60 * 60 * 1000),
-      offlineVerificationCode: offlineCode,
       accessKeyVerified: true,
     });
 
-    let emailSentFlag = false;
-    if (!emailVerified && verificationToken) {
-      emailSentFlag = await sendVerificationEmail(email, verificationToken);
-    }
+    const emailSentFlag = true;
 
     await createAuditLog(user._id as any, 'REGISTER', 'User', user._id as any, `${role} registered: ${email}`);
 
     res.status(201).json({
       success: true,
       message: emailVerified
-        ? `Registration successful as ${role}.`
+        ? 'Registration successful.'
         : emailSentFlag
           ? 'Registration successful. Please check your email for verification.'
           : 'Registration successful. Use the code to verify your account.',
@@ -129,7 +139,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         emailSent: emailVerified || emailSentFlag,
         emailVerified,
         role,
-        ...(!emailVerified && !emailSentFlag && offlineCode ? { verificationCode: offlineCode } : {}),
       },
     });
   } catch (error: any) {
@@ -142,7 +151,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, accessKey } = req.body;
 
-    const user = await User.findOne({ email }).select('+password');
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       res.status(401).json({ success: false, message: 'Invalid credentials.' });
       return;
@@ -500,10 +510,9 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
 
     const sent = await sendOTPEmail(email, otp);
 
-    if (!sent && (config.nodeEnv === 'development' || config.features.allowOtpFallbackInProduction)) {
-      // Fallback: return OTP in response when SMTP fails so
-      // registration can still proceed. Frontend shows devOtp
-      // to the user even in production.
+    if (!sent && config.nodeEnv === 'development') {
+      // Dev-only fallback: return OTP in response when SMTP fails.
+      // DO NOT return OTP in production.
       resetOtpRateLimit(req);
       res.json({
         success: true,
@@ -514,7 +523,13 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
     }
 
     if (!sent) {
-      res.status(500).json({ success: false, message: 'Failed to send OTP. Check your email address or try again.' });
+      const misconfigured = !config.email.user || !config.email.pass;
+      res.status(503).json({
+        success: false,
+        message: misconfigured
+          ? 'OTP email service is not configured. Please contact the administrator.'
+          : 'Failed to send OTP. Please try again in a moment.',
+      });
       return;
     }
 
@@ -540,7 +555,70 @@ export const verifyOtpEndpoint = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    res.json({ success: true, message: 'OTP verified successfully.' });
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const otpToken = jwt.sign({ email: normalizedEmail, purpose: 'register_email' }, config.jwt.secret, {
+      expiresIn: '10m',
+    });
+
+    res.json({ success: true, message: 'OTP verified successfully.', otpToken });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/v1/auth/faculty-summary  (auth required - used by student dashboard)
+export const getFacultySummaryForMe = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = req.user!;
+    if (user.role !== UserRole.STUDENT) {
+      res.status(403).json({ success: false, message: 'Only students can access this resource.' });
+      return;
+    }
+
+    if (!user.department || !user.section || !user.semester) {
+      res.status(400).json({
+        success: false,
+        message: 'Profile incomplete. Department, section, and semester are required.',
+      });
+      return;
+    }
+
+    const year = getStudentYearFromSemester((user as any).year, user.semester);
+    const requiredApprovals = getRequiredFacultyApprovals(year);
+
+    const faculty = await User.find({
+      role: UserRole.FACULTY,
+      department: user.department,
+      section: user.section,
+      semester: user.semester,
+      subject: { $exists: true, $ne: '' },
+      isActive: true,
+    })
+      .select('_id name email subject')
+      .sort({ subject: 1, name: 1 });
+
+    const subjectCounts = new Map<string, number>();
+    for (const f of faculty as any[]) {
+      const subject = (f.subject || '').trim() || 'Unknown';
+      subjectCounts.set(subject, (subjectCounts.get(subject) || 0) + 1);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        facultyCount: faculty.length,
+        requiredApprovals,
+        subjects: Array.from(subjectCounts.entries())
+          .map(([subject, count]) => ({ subject, count }))
+          .sort((a, b) => a.subject.localeCompare(b.subject)),
+        faculty: faculty.map((f: any) => ({
+          id: f._id,
+          name: f.name,
+          email: f.email,
+          subject: f.subject,
+        })),
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

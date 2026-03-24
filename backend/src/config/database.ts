@@ -27,7 +27,13 @@ export const connectDB = async (): Promise<void> => {
       serverSelectionTimeoutMS: 10000,
     });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
-    await cleanupLegacyIndexes();
+
+    // Production safety: do not drop indexes automatically unless explicitly enabled.
+    const shouldRunIndexMaintenance =
+      config.nodeEnv !== 'production' || process.env.RUN_INDEX_MAINTENANCE === 'true';
+    if (shouldRunIndexMaintenance) {
+      await cleanupLegacyIndexes();
+    }
   } catch (error) {
     console.error('MongoDB connection error:', error);
     if (config.nodeEnv === 'production') {

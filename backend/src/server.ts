@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -21,9 +21,20 @@ import chatRoutes from './routes/chatRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import { chatbotReply } from './controllers/chatbotController';
 import { otpLimiter } from './middleware/otpRateLimiter';
+import { startSlaEscalationJob } from './services/slaEscalationService';
 
 const app = express();
 const isDevelopment = config.nodeEnv === 'development';
+const localhostRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+const localIps = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+const isLocalRequest = (req: Request): boolean => {
+  const hostHeader = req.headers.host || '';
+  const host = hostHeader.split(':')[0].toLowerCase();
+  const requestIp = req.ip || '';
+
+  return host === 'localhost' || host === '127.0.0.1' || localIps.has(requestIp);
+};
 
 // Render/Reverse proxy support for correct client IP in rate limiting
 app.set('trust proxy', 1);
@@ -45,6 +56,13 @@ app.use(
         return;
       }
 
+      // In local development, allow localhost and 127.0.0.1 origins even if
+      // Vite auto-selects a different port (e.g., 5174 when 5173 is occupied).
+      if (isDevelopment && localhostRegex.test(origin)) {
+        callback(null, true);
+        return;
+      }
+
       if (config.frontendUrls.includes(origin)) {
         callback(null, true);
         return;
@@ -61,7 +79,7 @@ app.use(
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  skip: (req) => isDevelopment || req.path.startsWith('/v1/auth/'),
+  skip: (req) => isDevelopment || isLocalRequest(req) || req.path.startsWith('/v1/auth/'),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please try again later.' },
@@ -72,7 +90,7 @@ app.use('/api/', limiter);
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  skip: () => isDevelopment,
+  skip: (req) => isDevelopment || isLocalRequest(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many auth attempts.' },
@@ -81,7 +99,7 @@ const loginLimiter = rateLimit({
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 25,
-  skip: () => isDevelopment,
+  skip: (req) => isDevelopment || isLocalRequest(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many registration attempts. Please try again later.' },
@@ -138,6 +156,9 @@ const startServer = async () => {
   app.listen(config.port, () => {
     console.log(`🚀 CDGI No-Dues Server running on port ${config.port} [${config.nodeEnv}]`);
   });
+
+  // Background job: SLA escalation for overdue approvals (non-blocking)
+  startSlaEscalationJob();
 };
 
 startServer();

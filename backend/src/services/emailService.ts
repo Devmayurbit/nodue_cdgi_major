@@ -18,12 +18,74 @@ const withTimeout = async <T>(promise: Promise<T>, ms = 10000): Promise<T> => {
   });
 };
 
-const createTransporter = () =>
-  nodemailer.createTransport({
-    service: 'gmail',
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+const formatEmailError = (error: unknown): Record<string, any> => {
+  const err: any = error;
+  return {
+    name: err?.name,
+    message: err?.message,
+    code: err?.code,
+    command: err?.command,
+    responseCode: err?.responseCode,
+    errno: err?.errno,
+    syscall: err?.syscall,
+  };
+};
+
+const sendMailWithRetry = async (
+  transporter: nodemailer.Transporter,
+  mailOptions: nodemailer.SendMailOptions
+): Promise<boolean> => {
+  const attempts = Math.max(1, Number(config.email.retries ?? 2) + 1);
+  const timeoutMs = Math.max(1000, Number(config.email.timeoutMs ?? 10000));
+  const baseDelayMs = Math.max(50, Number(config.email.retryDelayMs ?? 300));
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await withTimeout(transporter.sendMail(mailOptions), timeoutMs);
+      return true;
+    } catch (error) {
+      // On auth/config errors, retries won't help much; still log and stop.
+      const code = (error as any)?.code;
+      console.error('Email send failed:', formatEmailError(error));
+
+      if (code === 'EAUTH' || code === 'ESOCKET' || code === 'ENOTFOUND') {
+        // Clear cached transporter so next attempt can recreate it.
+        cachedTransporter = null;
+      }
+
+      if (i === attempts - 1) return false;
+      const jitter = Math.floor(Math.random() * 150);
+      await sleep(baseDelayMs * (i + 1) + jitter);
+    }
+  }
+
+  return false;
+};
+
+let cachedTransporter: nodemailer.Transporter | null = null;
+
+const getTransporter = (): nodemailer.Transporter | null => {
+  // Do not attempt to send emails when credentials are missing.
+  // This commonly happens in production when env vars were not set.
+  if (!config.email.user || !config.email.pass) {
+    console.error('Email is not configured (missing SMTP_USER/SMTP_PASS or EMAIL_USER/EMAIL_PASS).');
+    return null;
+  }
+
+  if (cachedTransporter) return cachedTransporter;
+
+  const port = config.email.port;
+  const secure = port === 465;
+
+  cachedTransporter = nodemailer.createTransport({
+    host: config.email.host,
+    port,
+    secure,
     auth: {
-      user: process.env.EMAIL_USER || config.email.user,
-      pass: process.env.EMAIL_PASS || config.email.pass,
+      user: config.email.user,
+      pass: config.email.pass,
     },
     pool: true,
     maxConnections: 2,
@@ -32,14 +94,18 @@ const createTransporter = () =>
     socketTimeout: 10000,
   });
 
+  return cachedTransporter;
+};
+
 export const sendVerificationEmail = async (
   email: string,
   token: string
 ): Promise<boolean> => {
   try {
     const verificationUrl = `${config.frontendUrl}/verify-email?token=${token}`;
-    const transporter = createTransporter();
-    await withTimeout(transporter.sendMail({
+    const transporter = getTransporter();
+    if (!transporter) return false;
+    return await sendMailWithRetry(transporter, {
       from: config.email.from,
       to: email,
       subject: 'CDGI No-Dues - Verify Your Email',
@@ -54,10 +120,9 @@ export const sendVerificationEmail = async (
           <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
         </div>
       `,
-    }));
-    return true;
+    });
   } catch (error) {
-    console.error('Email send failed:', error);
+    console.error('Verification email send failed:', formatEmailError(error));
     return false;
   }
 };
@@ -68,15 +133,16 @@ export const sendNotificationEmail = async (
   html: string
 ): Promise<boolean> => {
   try {
-    const transporter = createTransporter();
-    await withTimeout(transporter.sendMail({
+    const transporter = getTransporter();
+    if (!transporter) return false;
+    return await sendMailWithRetry(transporter, {
       from: config.email.from,
       to: email,
       subject,
       html,
-    }));
-    return true;
-  } catch {
+    });
+  } catch (error) {
+    console.error('Notification email send failed:', formatEmailError(error));
     return false;
   }
 };
@@ -244,8 +310,9 @@ export const verifyOTP = async (email: string, otp: string): Promise<boolean> =>
 
 export const sendOTPEmail = async (email: string, otp: string): Promise<boolean> => {
   try {
-    const transporter = createTransporter();
-    await withTimeout(transporter.sendMail({
+    const transporter = getTransporter();
+    if (!transporter) return false;
+    return await sendMailWithRetry(transporter, {
       from: config.email.from,
       to: email,
       subject: 'CDGI No-Dues - Email Verification OTP',
@@ -260,10 +327,9 @@ export const sendOTPEmail = async (email: string, otp: string): Promise<boolean>
           <p style="color:#999;font-size:12px;margin-top:20px;">If you did not request this, please ignore.</p>
         </div>
       `,
-    }));
-    return true;
+    });
   } catch (error) {
-    console.error('OTP email send failed:', error);
+    console.error('OTP email send failed:', formatEmailError(error));
     return false;
   }
 };

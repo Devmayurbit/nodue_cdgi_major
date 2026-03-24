@@ -45,6 +45,7 @@ const SubjectApprovalSchema = new Schema<ISubjectApproval>(
 SubjectApprovalSchema.index({ noDues: 1 });
 SubjectApprovalSchema.index({ student: 1, status: 1 });
 SubjectApprovalSchema.index({ faculty: 1, status: 1 });
+SubjectApprovalSchema.index({ status: 1, createdAt: 1 });
 SubjectApprovalSchema.index({ noDues: 1, faculty: 1 }, { unique: true });
 
 export default mongoose.model<ISubjectApproval>('SubjectApproval', SubjectApprovalSchema);
